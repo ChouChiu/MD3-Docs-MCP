@@ -1,0 +1,39 @@
+{
+  "name": "md3-docs-mcp",
+  "version": "0.1.0",
+  "description": "A stdio MCP server for live Material Design 3 documentation",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "biome check . && tsc --noEmit",
+    "fix": "biome check --write .",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "test:live": "MD3_LIVE_TESTS=1 node --import tsx --test test/infrastructure/material/live.test.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.6",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "fast-xml-parser": "^5.10.1",
+    "node-html-markdown": "^2.0.0",
+    "tsx": "^4.23.1",
+    "zod": "^4.4.3"
+  }
+}
