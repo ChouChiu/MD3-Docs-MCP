@@ -1,5 +1,7 @@
 # MD3-Docs MCP
 
+[![npm version](https://img.shields.io/npm/v/md3-docs-mcp?label=npm)](https://www.npmjs.com/package/md3-docs-mcp)
+
 `MD3-Docs` is a stdio Model Context Protocol server that gives AI assistants access to
 the live [Material Design 3 documentation](https://m3.material.io/). It covers
 Foundations, Styles, and Components and returns the official English content as Markdown.
@@ -38,17 +40,73 @@ mirror the same boundaries under `test/`.
 ## Requirements
 
 - Node.js 24 or later
-- [Bun](https://bun.sh/) as the package manager
+- npm, included with Node.js
 
-Bun is used only for dependency management and script orchestration. The application uses
+[Bun](https://bun.sh/) is required only when developing from source. The application uses
 standard Node.js and Web APIs and does not depend on `Bun.*` runtime features.
 
-## Install and run
+## Install and configure
+
+### Run with npx (recommended)
+
+No global installation is required. Add the following to your MCP client's configuration:
+
+```json
+{
+  "mcpServers": {
+    "MD3-Docs": {
+      "command": "npx",
+      "args": ["-y", "md3-docs-mcp@latest"]
+    }
+  }
+}
+```
+
+The `-y` flag lets `npx` install or update the package without an interactive prompt.
+
+### Install globally
+
+Install the command once:
 
 ```sh
-bun install
-bun run start
+npm install --global md3-docs-mcp
 ```
+
+Then configure your MCP client to run it directly:
+
+```json
+{
+  "mcpServers": {
+    "MD3-Docs": {
+      "command": "md3-docs-mcp"
+    }
+  }
+}
+```
+
+### Run from source
+
+```sh
+git clone https://github.com/ChouChiu/MD3-Docs-MCP.git
+cd MD3-Docs-MCP
+bun install --frozen-lockfile
+```
+
+Use the absolute path to the checkout as `cwd`:
+
+```json
+{
+  "mcpServers": {
+    "MD3-Docs": {
+      "command": "bun",
+      "args": ["run", "start"],
+      "cwd": "/absolute/path/to/MD3-Docs-MCP"
+    }
+  }
+}
+```
+
+## Development
 
 Development and validation commands:
 
@@ -73,7 +131,7 @@ frozen dependency installation, and runs Biome, TypeScript, and the offline test
 Node.js 24. It runs for branch pushes, pull requests, and manual dispatches. Live tests
 remain opt-in and do not make CI depend on the Material site.
 
-Releases are created from semantic version tags such as `v0.1.0`. The tag must exactly
+Releases are created from semantic version tags such as `v1.0.1`. The tag must exactly
 match the version in `package.json`; after validation, the workflow publishes the
 source-only package to npm and creates a GitHub Release with generated notes. It does not
 produce or attach build artifacts. GitHub's standard source archives remain available.
@@ -82,40 +140,6 @@ Add a repository secret named `NPM_TOKEN` before publishing the first release. I
 an npm granular access token with permission to publish `md3-docs-mcp`. Re-running a
 partially completed release is safe: an npm version or GitHub Release that already exists
 is skipped.
-
-## MCP client configuration
-
-Use an absolute path to this checkout. A generic stdio configuration looks like:
-
-```json
-{
-  "mcpServers": {
-    "MD3-Docs": {
-      "command": "node",
-      "args": [
-        "--import",
-        "tsx",
-        "/absolute/path/to/MD3-Docs-MCP/src/index.ts"
-      ],
-      "cwd": "/absolute/path/to/MD3-Docs-MCP"
-    }
-  }
-}
-```
-
-Alternatively, invoke the package script:
-
-```json
-{
-  "mcpServers": {
-    "MD3-Docs": {
-      "command": "bun",
-      "args": ["run", "start"],
-      "cwd": "/absolute/path/to/MD3-Docs-MCP"
-    }
-  }
-}
-```
 
 The server writes only MCP protocol messages to stdout. Diagnostics go to stderr.
 

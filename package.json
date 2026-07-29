@@ -1,10 +1,14 @@
 {
   "name": "md3-docs-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A stdio MCP server for live Material Design 3 documentation",
   "type": "module",
   "license": "MIT",
+  "bin": {
+    "md3-docs-mcp": "bin/md3-docs-mcp.js"
+  },
   "files": [
+    "bin",
     "src"
   ],
   "publishConfig": {

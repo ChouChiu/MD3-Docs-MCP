@@ -3,12 +3,12 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
-test("source entrypoint serves MCP over a real stdio child process", {
+test("package CLI serves MCP over a real stdio child process", {
   timeout: 15_000,
 }, async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ["--import", "tsx", "src/index.ts"],
+    args: ["bin/md3-docs-mcp.js"],
     cwd: process.cwd(),
     stderr: "pipe",
   });
