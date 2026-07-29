@@ -3,7 +3,7 @@ import { slugify } from "../../infrastructure/material/parsers.js";
 import { TtlLruCache } from "../../shared/cache/ttl-lru-cache.js";
 import { Md3Error } from "../../shared/errors/md3-error.js";
 import { renderDocument } from "./render-document.js";
-import { blockHeadings } from "./semantic-markdown.js";
+import { blockHeadings, selectBlockHeading } from "./semantic-markdown.js";
 import type { RenderedDocument, SemanticDocument } from "./types.js";
 
 function normalizeHeading(value: string): string {
@@ -72,11 +72,10 @@ export class DocumentService {
     const selectedSections = requestedHeading
       ? sections.map((section) => ({
           ...section,
-          blocks: section.blocks.filter((block) =>
-            blockHeadings(block).some(
-              (heading) => normalizeHeading(heading) === normalizeHeading(requestedHeading),
-            ),
-          ),
+          blocks: section.blocks.flatMap((block) => {
+            const selected = selectBlockHeading(block, requestedHeading);
+            return selected ? [selected] : [];
+          }),
         }))
       : sections;
     const canonicalPath = requestedSection

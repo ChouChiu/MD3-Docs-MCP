@@ -11,6 +11,7 @@ interface SearchCursor {
   kind: "search";
   start: number;
   itemOffset: number;
+  rankOffset: number;
   query: string;
   category?: string;
 }
@@ -40,6 +41,7 @@ const cursorSchema = z.discriminatedUnion("kind", [
       kind: z.literal("search"),
       start: z.number().int().positive(),
       itemOffset: z.number().int().nonnegative(),
+      rankOffset: z.number().int().nonnegative(),
       query: z.string().min(1).max(200),
       category: z.string().min(1).max(100).optional(),
     })

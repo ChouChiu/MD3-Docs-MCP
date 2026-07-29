@@ -85,3 +85,59 @@ test("MCP v2 tools work over an in-memory transport", async () => {
     await server.close();
   }
 });
+
+test("search ranks continue across cursor pages", async () => {
+  const fixtureFetch = createFixtureFetch();
+  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input.toString() : input.url,
+    );
+    if (url.pathname === "/search_api") {
+      return new Response(
+        JSON.stringify({
+          items: [
+            {
+              title: "Buttons",
+              link: "https://m3.material.io/components/buttons/overview",
+              snippet: "First",
+            },
+            {
+              title: "Button guidelines",
+              link: "https://m3.material.io/components/buttons/guidelines",
+              snippet: "Second",
+            },
+          ],
+        }),
+      );
+    }
+    return fixtureFetch(input, init);
+  }) as typeof fetch;
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = createMd3Server(new Md3Client({ fetcher }));
+  const client = new Client({ name: "md3-docs-rank-test", version: "1.0.0" });
+
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  try {
+    const first = await client.callTool({
+      name: "search_md3_docs",
+      arguments: { query: "buttons", limit: 1 },
+    });
+    const firstContent = first.structuredContent as {
+      hits: Array<{ rank: number }>;
+      nextCursor?: string;
+    };
+    assert.equal(firstContent.hits[0]?.rank, 1);
+    assert.ok(firstContent.nextCursor);
+
+    const second = await client.callTool({
+      name: "search_md3_docs",
+      arguments: { query: "buttons", limit: 1, cursor: firstContent.nextCursor },
+    });
+    const secondContent = second.structuredContent as { hits: Array<{ rank: number }> };
+    assert.equal(secondContent.hits[0]?.rank, 2);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});

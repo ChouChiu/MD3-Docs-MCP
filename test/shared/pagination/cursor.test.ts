@@ -7,6 +7,7 @@ test("cursor round-trips valid data", () => {
     kind: "search",
     start: 11,
     itemOffset: 2,
+    rankOffset: 12,
     query: "buttons",
     category: "components",
   });
@@ -15,6 +16,7 @@ test("cursor round-trips valid data", () => {
     kind: "search",
     start: 11,
     itemOffset: 2,
+    rankOffset: 12,
     query: "buttons",
     category: "components",
   });
@@ -30,7 +32,14 @@ test("cursor rejects malformed fields and unexpected properties", () => {
       maxCharacters: 12_000,
     },
     { kind: "list", offset: -1, fingerprint: "hash" },
-    { kind: "search", start: 1, itemOffset: 0, query: "x", unexpected: true },
+    {
+      kind: "search",
+      start: 1,
+      itemOffset: 0,
+      rankOffset: 0,
+      query: "x",
+      unexpected: true,
+    },
   ]) {
     const cursor = Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
     assert.throws(() => decodeCursor(cursor, value.kind as "read"), /cursor is invalid/i);

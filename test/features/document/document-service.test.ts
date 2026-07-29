@@ -28,7 +28,32 @@ test("document feature selects the requested tab", async () => {
 });
 
 test("document feature selects an exact nested heading", async () => {
-  const client = new Md3Client({ fetcher: createFixtureFetch() });
+  const fixtureFetch = createFixtureFetch();
+  const nestedDocument = JSON.parse(documentJson) as {
+    sections: Array<{
+      name: string;
+      contentBlocks: Array<{ contentChunks: Array<{ htmlValue?: string }> }>;
+    }>;
+  };
+  const guidelines = nestedDocument.sections.find((section) => section.name === "Guidelines");
+  const chunk = guidelines?.contentBlocks[0]?.contentChunks[0];
+  if (chunk) {
+    chunk.htmlValue =
+      "<h2>Before</h2><p>Before body.</p>" +
+      "<h2>Labels</h2><p>Keep labels concise.</p>" +
+      "<h3>Supporting text</h3><p>Use supporting text carefully.</p>" +
+      "<h2>After</h2><p>After body.</p>";
+  }
+  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input.toString() : input.url,
+    );
+    if (url.pathname.endsWith("/buttons.json")) {
+      return new Response(JSON.stringify(nestedDocument));
+    }
+    return fixtureFetch(input, init);
+  }) as typeof fetch;
+  const client = new Md3Client({ fetcher });
   const documents = new DocumentService(client);
   const document = await documents.readDocument(
     "components/buttons/guidelines",
@@ -36,8 +61,11 @@ test("document feature selects an exact nested heading", async () => {
     "Labels",
   );
 
-  assert.deepEqual(document.availableHeadings, ["Labels"]);
+  assert.deepEqual(document.availableHeadings, ["Before", "Labels", "Supporting text", "After"]);
   assert.match(document.markdown, /Keep labels concise/);
+  assert.match(document.markdown, /Use supporting text carefully/);
+  assert.doesNotMatch(document.markdown, /Before body/);
+  assert.doesNotMatch(document.markdown, /After body/);
   assert.doesNotMatch(document.markdown, /important actions/);
 });
 

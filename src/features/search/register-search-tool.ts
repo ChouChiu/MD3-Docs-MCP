@@ -40,6 +40,7 @@ export function registerSearchFeature(server: McpServer, client: Md3Client): voi
       try {
         let start = 1;
         let itemOffset = 0;
+        let rankOffset = 0;
         if (cursor) {
           const decoded = decodeCursor(cursor, "search");
           if (decoded.query !== query || decoded.category !== category) {
@@ -47,11 +48,12 @@ export function registerSearchFeature(server: McpServer, client: Md3Client): voi
           }
           start = decoded.start;
           itemOffset = decoded.itemOffset;
+          rankOffset = decoded.rankOffset;
         }
         const result = await client.search(query, category, start, limit, itemOffset);
         return toolResult({
           hits: result.hits.map((hit, index) => ({
-            rank: index + 1,
+            rank: rankOffset + index + 1,
             title: hit.title,
             snippet: hit.snippet,
             path: hit.path,
@@ -65,6 +67,7 @@ export function registerSearchFeature(server: McpServer, client: Md3Client): voi
                   kind: "search",
                   start: result.nextStart,
                   itemOffset: result.nextItemOffset ?? 0,
+                  rankOffset: rankOffset + result.hits.length,
                   query,
                   ...(category ? { category } : {}),
                 }),
