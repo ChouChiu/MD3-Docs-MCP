@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   checks:
-    name: Lint, typecheck, and test
+    name: Lint, typecheck, test, and package
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -55,3 +55,6 @@ jobs:
 
       - name: Run offline tests
         run: bun run test
+
+      - name: Verify npm package contents
+        run: npm pack --dry-run

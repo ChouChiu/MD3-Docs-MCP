@@ -1,55 +1,25 @@
-# MD3-Docs MCP
+# MD3 Docs MCP
 
 [![npm version](https://img.shields.io/npm/v/md3-docs-mcp?label=npm)](https://www.npmjs.com/package/md3-docs-mcp)
 
-`MD3-Docs` is a stdio Model Context Protocol server that gives AI assistants access to
-the live [Material Design 3 documentation](https://m3.material.io/). It covers
-Foundations, Styles, and Components and returns the official English content as Markdown.
+`MD3 Docs` is a stdio Model Context Protocol server for the live
+[Material Design 3 documentation](https://m3.material.io/). It gives Codex, ChatGPT, and
+other MCP clients concise access to official English Foundations, Styles, and Components
+content.
 
-The server does not bundle a documentation snapshot or require a browser. It discovers the
-current Material site data version, fetches the site's structured JSON, and converts text,
-tables, implementation resources, links, code, and media metadata into an AI-friendly form.
-
-## Architecture
-
-The codebase uses a feature-driven structure:
-
-```text
-src/
-├── app/                         # Application composition
-├── features/
-│   ├── catalog/                 # list_md3_docs
-│   ├── document/                # read_md3_doc and Markdown rendering
-│   ├── resources/               # MCP document resources
-│   └── search/                  # search_md3_docs
-├── infrastructure/
-│   └── material/                # Material site client, parsers, and upstream types
-├── shared/
-│   ├── cache/                   # Generic TTL/LRU cache
-│   ├── errors/                  # Domain error representation
-│   ├── http/                    # Retrying fetch adapter
-│   ├── mcp/                     # Shared MCP result helpers
-│   └── pagination/              # Opaque cursors
-└── index.ts                     # stdio process entrypoint
-```
-
-Features own their MCP schemas and handlers. `app` composes features, infrastructure adapts
-external Material services, and `shared` contains only feature-independent utilities. Tests
-mirror the same boundaries under `test/`.
+Version 2 adds task-focused context gathering, semantic Markdown pagination, explicit
+structured output schemas, clean search results, and source citations. The server does not
+bundle a documentation snapshot, translate content, call another model, or use unofficial
+sources.
 
 ## Requirements
 
-- Node.js 24 or later
-- npm, included with Node.js
+- Node.js 20 or later
+- Network access to `https://m3.material.io`
 
-[Bun](https://bun.sh/) is required only when developing from source. The application uses
-standard Node.js and Web APIs and does not depend on `Bun.*` runtime features.
+## Configure
 
-## Install and configure
-
-### Run with npx (recommended)
-
-No global installation is required. Add the following to your MCP client's configuration:
+The recommended setup runs the latest published package through `npx`:
 
 ```json
 {
@@ -62,92 +32,22 @@ No global installation is required. Add the following to your MCP client's confi
 }
 ```
 
-The `-y` flag lets `npx` install or update the package without an interactive prompt.
-
-### Install globally
-
-Install the command once:
+Alternatively, install it globally:
 
 ```sh
 npm install --global md3-docs-mcp
 ```
 
-Then configure your MCP client to run it directly:
+Then use `md3-docs-mcp` as the MCP server command.
 
-```json
-{
-  "mcpServers": {
-    "MD3-Docs": {
-      "command": "md3-docs-mcp"
-    }
-  }
-}
-```
-
-### Run from source
-
-```sh
-git clone https://github.com/ChouChiu/MD3-Docs-MCP.git
-cd MD3-Docs-MCP
-bun install --frozen-lockfile
-```
-
-Use the absolute path to the checkout as `cwd`:
-
-```json
-{
-  "mcpServers": {
-    "MD3-Docs": {
-      "command": "bun",
-      "args": ["run", "start"],
-      "cwd": "/absolute/path/to/MD3-Docs-MCP"
-    }
-  }
-}
-```
-
-## Development
-
-Development and validation commands:
-
-```sh
-bun run dev
-bun run check
-bun run fix
-bun run typecheck
-bun run test
-bun run test:live
-```
-
-`check` runs Biome formatting and lint validation followed by TypeScript type checking.
-`fix` applies Biome's safe formatting, lint, and import-organization fixes.
-
-The default tests are offline. `test:live` explicitly contacts `m3.material.io`.
-
-## Continuous integration and releases
-
-The code-quality workflow restores a platform-specific `node_modules` cache, performs a
-frozen dependency installation, and runs Biome, TypeScript, and the offline test suite on
-Node.js 24. It runs for branch pushes, pull requests, and manual dispatches. Live tests
-remain opt-in and do not make CI depend on the Material site.
-
-Releases are created from semantic version tags such as `v1.0.1`. The tag must exactly
-match the version in `package.json`; after validation, the workflow publishes the
-source-only package to npm and creates a GitHub Release with generated notes. It does not
-produce or attach build artifacts. GitHub's standard source archives remain available.
-
-Add a repository secret named `NPM_TOKEN` before publishing the first release. It must be
-an npm granular access token with permission to publish `md3-docs-mcp`. Re-running a
-partially completed release is safe: an npm version or GitHub Release that already exists
-is skipped.
-
-The server writes only MCP protocol messages to stdout. Diagnostics go to stderr.
+The server communicates only over stdio. Protocol messages are written to stdout and
+diagnostics to stderr.
 
 ## Tools
 
-### `list_md3_docs`
+### `browse_md3_docs`
 
-Lists the official document directory.
+Browse the official directory by category or canonical path prefix.
 
 ```json
 {
@@ -162,11 +62,14 @@ Inputs:
 - `category`: optional `foundations`, `styles`, or `components`
 - `prefix`: optional canonical path prefix
 - `limit`: 1–100, default 50
-- `cursor`: opaque cursor returned by the previous call
+- `cursor`: opaque cursor from the preceding page
+
+Directory entries include their title, path, category, available sections, description,
+updated date, and official source URL.
 
 ### `search_md3_docs`
 
-Searches the official site and discards results outside the supported documentation scope.
+Search the official site using natural language.
 
 ```json
 {
@@ -176,65 +79,157 @@ Searches the official site and discards results outside the supported documentat
 }
 ```
 
+Search results are deduplicated and cleaned of HTML and site-navigation noise. Each result
+contains a stable rank, canonical path, optional section, concise snippet, and source URL.
+
 ### `read_md3_doc`
 
-Reads a canonical path or a clean `https://m3.material.io/` URL.
+Read one canonical path or clean `https://m3.material.io/` URL.
 
 ```json
 {
   "path": "components/buttons/guidelines",
+  "heading": "Placement",
   "maxCharacters": 12000
 }
 ```
 
-You may provide `section` explicitly. Base component paths default to `Overview` when that
-tab exists. Long results return an opaque `nextCursor`; pass it back with the same path and
-section to continue. A cursor is rejected if the live document version changes.
+Inputs:
 
-All tools provide both structured MCP output and a JSON text fallback.
+- `path`: canonical path or official URL
+- `section`: optional section name when it is not already present in the path
+- `heading`: optional exact heading within the selected section
+- `maxCharacters`: 1,000–30,000, default 12,000
+- `cursor`: opaque semantic-page cursor
 
-## Resources
+Pagination happens between sections, content blocks, paragraphs, tables, and complete code
+fences. It never slices the response at an arbitrary character offset. The result reports
+available sections and headings, page and block ranges, media metadata, the live content
+version, and whether more pages remain.
 
-Documents are also exposed as `text/markdown` resources:
+### `get_md3_context`
 
-```text
-md3-docs://docs/components/buttons/guidelines
+Gather several official sources for one task in a single call.
+
+```json
+{
+  "task": "Implement and review navigation for a large-screen mail app",
+  "mode": "implementation",
+  "paths": ["components/navigation-rail/guidelines"],
+  "maxSources": 5,
+  "maxCharacters": 20000
+}
 ```
 
-Resource listing is generated from the live sitemap. Resource reads return the complete
-selected document tab; use `read_md3_doc` when pagination is preferable.
+Inputs:
 
-## Fetching, caching, and safety
+- `task`: the implementation, review, or research question
+- `mode`: `implementation`, `review`, or `research`; default `research`
+- `paths`: up to five optional sources that must be considered first
+- `category`: optional documentation category
+- `maxSources`: 1–8, default 5
+- `maxCharacters`: 4,000–40,000, default 20,000
 
-- The sitemap, route index, searches, documents, and auxiliary resource tables use a
-  five-minute in-process LRU cache with at most 256 entries.
+The tool combines pinned paths, official search results, and directory matches. It loads
+candidate documents concurrently and ranks intact semantic blocks by task relevance:
+
+- `implementation` prioritizes Guidelines, Specs, Overview, and Accessibility.
+- `review` prioritizes Guidelines and Accessibility and adds a cited review checklist.
+- `research` follows query relevance without imposing a workflow-specific section order.
+
+Context excerpts use source labels such as `[S1]`; the structured result maps every label to
+its official URL. A failed candidate becomes a warning when other evidence is available.
+The tool returns an error only when it cannot produce any usable official evidence.
+
+The character budget applies to the Markdown body, not protocol metadata.
+
+## Errors
+
+Tool errors are JSON objects with a stable code, message, and `retryable` flag. Relevant
+codes include:
+
+- `INVALID_PATH` and `INVALID_REQUEST`
+- `NOT_FOUND`
+- `CURSOR_INVALID` and `CURSOR_STALE`
+- `UPSTREAM_HTTP`, `UPSTREAM_TIMEOUT`, and `UPSTREAM_SCHEMA`
+
+Paths are restricted to clean official URLs under `foundations`, `styles`, and `components`.
+Credentials, query strings, fragments, traversal, ambiguous separators, and external hosts
+are rejected.
+
+## Fetching and caching
+
+- The site index, directory, search pages, raw documents, semantic documents, rendered
+  resources, and context dependencies use five-minute in-process LRU caches.
 - Identical concurrent requests share one upstream operation.
-- Requests time out after ten seconds. Network failures, HTTP 429, and selected 5xx
-  responses are retried once.
-- Expired content is not served when a refresh fails.
-- Only clean URLs on `https://m3.material.io` under `foundations`, `styles`, and
-  `components` are accepted. Query strings, fragments, credentials, traversal, and
-  external hosts are rejected.
+- Context documents and auxiliary resource tables load with a concurrency limit of four.
+- Requests time out after ten seconds.
+- Network failures, HTTP 429, and selected 5xx responses retry once with exponential jitter.
+  `Retry-After` is honored up to ten seconds.
+- Expired content is not served when refresh fails, and no persistent cache is written.
 
-If the Material site changes its unpublished structured-data layout, tools return an
-`UPSTREAM_SCHEMA` error. Run `bun run test:live` to diagnose site compatibility.
+The Material site uses unpublished structured endpoints. If their schema changes, tools
+return `UPSTREAM_SCHEMA`; the opt-in live test diagnoses compatibility.
 
-## Troubleshooting
+## Development
 
-- If startup reports that `tsx` cannot be found, run `bun install` in the project directory.
-- An `UPSTREAM_TIMEOUT` or `UPSTREAM_HTTP` result indicates a live-site or network failure;
-  the server does not fall back to an expired document snapshot.
-- An `UPSTREAM_SCHEMA` result usually means the Material site changed its internal data
-  shape. Run `bun run test:live` to identify the affected endpoint.
-- `CURSOR_STALE` means the live document or result set changed. Repeat the original call
-  without its cursor.
-- A stdio server normally prints no human-readable startup message. Inspect the MCP
-  client's captured stderr for diagnostics.
+```sh
+git clone https://github.com/ChouChiu/MD3-Docs-MCP.git
+cd MD3-Docs-MCP
+bun install --frozen-lockfile
+bun run check
+bun run test
+bun run test:live
+bun run build
+```
+
+Development uses Bun for dependency and script management. Published packages contain
+compiled JavaScript in `dist/`; runtime users do not install TypeScript or `tsx`.
+
+The source is feature-driven:
+
+```text
+src/
+├── app/                    # Server composition
+├── features/
+│   ├── catalog/            # browse_md3_docs
+│   ├── context/            # get_md3_context and evidence ranking
+│   ├── document/           # semantic model, rendering, and read_md3_doc
+│   └── search/             # search_md3_docs
+├── infrastructure/
+│   └── material/           # Live Material site client and parsers
+└── shared/                 # Cache, HTTP, errors, cursors, concurrency, version
+```
+
+Offline tests cover protocol contracts, semantic pagination, ranking, caching, retries,
+compiled CLI startup, and the packed npm artifact. Live tests contact `m3.material.io`
+only when `MD3_LIVE_TESTS=1`.
+
+## Migrating from v1
+
+Version 2 is intentionally incompatible:
+
+- `list_md3_docs` is replaced by `browse_md3_docs`.
+- `read_md3_doc` uses semantic pages instead of character offsets and has a new cursor shape.
+- Search and read tools return explicit v2 structured output.
+- `get_md3_context` is new.
+- MCP Resources and `md3-docs://` URIs are removed.
+- The minimum runtime changes from Node.js 24 to Node.js 20.
+
+Remove stored v1 cursors when upgrading. Tool clients should rediscover schemas after
+restarting the server.
+
+## Release
+
+Semantic version tags such as `v2.0.0` must match `package.json`. CI validates formatting,
+types, offline tests, the compiled CLI, and npm package contents before publication.
+Releases publish only `dist/`, the README, license, and package metadata. The compiled
+`dist/index.js` contains the Node.js shebang and serves directly as the npm executable.
 
 ## License and attribution
 
-The MCP server source code is available under the [MIT License](LICENSE).
+The server source is available under the [MIT License](LICENSE).
 
-Material Design documentation, images, videos, trademarks, and other remotely fetched
-content remain the property of their respective owners and are not covered by this
-repository's license. Every document response retains its official source URL.
+Material Design documentation, media, trademarks, and remotely fetched content remain the
+property of their respective owners and are not covered by this repository's license. All
+returned evidence retains its official source URL.
