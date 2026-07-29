@@ -68,9 +68,10 @@ The default tests are offline. `test:live` explicitly contacts `m3.material.io`.
 
 ## Continuous integration and releases
 
-The CI workflow runs frozen dependency installation, Biome and TypeScript checks, and the
-offline test suite on Node.js 24. It runs for branch pushes, pull requests, and manual
-dispatches. Live tests remain opt-in and do not make CI depend on the Material site.
+The code-quality workflow restores a platform-specific `node_modules` cache, performs a
+frozen dependency installation, and runs Biome, TypeScript, and the offline test suite on
+Node.js 24. It runs for branch pushes, pull requests, and manual dispatches. Live tests
+remain opt-in and do not make CI depend on the Material site.
 
 Releases are created from semantic version tags such as `v0.1.0`. The tag must exactly
 match the version in `package.json`; after validation, the workflow publishes the
