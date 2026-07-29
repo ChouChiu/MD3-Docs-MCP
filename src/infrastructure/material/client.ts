@@ -24,6 +24,26 @@ import type {
 } from "./types.js";
 
 const BASE_URL = "https://m3.material.io";
+const COMMON_SECTION_SLUGS = new Set(["overview", "specs", "guidelines", "accessibility"]);
+
+function cleanSearchText(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\b(?:link\s+)?copy link\s*link copied\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function searchSection(path: string): string | undefined {
+  const slug = path.split("/").at(-1);
+  return slug && COMMON_SECTION_SLUGS.has(slug) ? humanize(slug) : undefined;
+}
 
 const searchResponseSchema = z
   .object({
@@ -106,6 +126,7 @@ export class Md3Client {
     const key = `search:${query}:${category ?? "*"}:${start}:${itemOffset}:${limit}`;
     return this.#cache.getOrLoad(key, async () => {
       const hits: SearchHit[] = [];
+      const seenPaths = new Set<string>();
       let upstreamStart = start;
       let nextStart: number | undefined;
       let nextItemOffset: number | undefined;
@@ -138,14 +159,18 @@ export class Md3Client {
           } catch {
             continue;
           }
+          if (seenPaths.has(path)) continue;
+          seenPaths.add(path);
           const hitCategory = getCategory(path);
           if (category && hitCategory !== category) continue;
+          const section = searchSection(path);
           hits.push({
-            title: item.title ?? humanize(path.split("/").at(-1) ?? path),
-            snippet: item.snippet ?? "",
+            title: cleanSearchText(item.title ?? humanize(path.split("/").at(-1) ?? path)),
+            snippet: cleanSearchText(item.snippet ?? ""),
             path,
             url: `${BASE_URL}/${path}`,
             category: hitCategory,
+            ...(section ? { section } : {}),
           });
           if (hits.length === limit) {
             if (index + 1 < items.length) {
@@ -187,8 +212,7 @@ export class Md3Client {
     if (!route) throw new Md3Error("NOT_FOUND", "Material 3 document was not found", { path });
 
     const suffix = path === route.path ? undefined : path.slice(route.path.length + 1);
-    const section =
-      requestedSection ??
+    let section =
       (suffix ? route.tabs.find((tab) => slugify(tab) === suffix.toLowerCase()) : undefined) ??
       (route.tabs.some((tab) => slugify(tab) === "overview") ? "Overview" : undefined);
     if (requestedSection && route.tabs.length > 0) {
@@ -199,6 +223,9 @@ export class Md3Client {
           availableSections: route.tabs,
         });
       }
+      section = matched;
+    } else if (requestedSection) {
+      section = requestedSection;
     }
     const canonicalPath = section ? `${route.path}/${slugify(section)}` : route.path;
     return { route, canonicalPath, ...(section ? { section } : {}) };

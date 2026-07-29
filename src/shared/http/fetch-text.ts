@@ -1,10 +1,23 @@
 import { Md3Error } from "../errors/md3-error.js";
+import { APP_VERSION } from "../version.js";
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 export interface FetchTextOptions {
   timeoutMs?: number;
   retries?: number;
+}
+
+function retryDelay(response: Response | undefined, attempt: number): number {
+  const retryAfter = response?.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 10_000);
+    const timestamp = Date.parse(retryAfter);
+    if (Number.isFinite(timestamp)) return Math.min(Math.max(timestamp - Date.now(), 0), 10_000);
+  }
+  const exponential = 100 * 2 ** attempt;
+  return exponential + Math.floor(Math.random() * Math.max(25, exponential / 2));
 }
 
 export async function fetchText(
@@ -19,11 +32,12 @@ export async function fetchText(
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response | undefined;
     try {
-      const response = await fetcher(url, {
+      response = await fetcher(url, {
         headers: {
           accept: "application/json, text/plain, text/html, application/xml",
-          "user-agent": "MD3-Docs-MCP/0.1",
+          "user-agent": `MD3-Docs-MCP/${APP_VERSION}`,
         },
         redirect: "error",
         signal: controller.signal,
@@ -59,7 +73,7 @@ export async function fetchText(
     } finally {
       clearTimeout(timeout);
     }
-    await new Promise((resolve) => setTimeout(resolve, 100 * 2 ** attempt));
+    await new Promise((resolve) => setTimeout(resolve, retryDelay(response, attempt)));
   }
   throw lastError;
 }

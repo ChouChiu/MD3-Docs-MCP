@@ -17,10 +17,12 @@ interface SearchCursor {
 
 interface ReadCursor {
   kind: "read";
-  offset: number;
+  page: number;
   path: string;
   section?: string;
+  heading?: string;
   version: string;
+  maxCharacters: number;
 }
 
 export type CursorData = ListCursor | SearchCursor | ReadCursor;
@@ -45,10 +47,12 @@ const cursorSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("read"),
-      offset: z.number().int().nonnegative(),
+      page: z.number().int().nonnegative(),
       path: z.string().min(1).max(500),
       section: z.string().min(1).max(100).optional(),
+      heading: z.string().min(1).max(200).optional(),
       version: z.string().min(1).max(200),
+      maxCharacters: z.number().int().min(1_000).max(30_000),
     })
     .strict(),
 ]);

@@ -2,8 +2,23 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
 import { CATEGORIES, type Md3Client } from "../../infrastructure/material/index.js";
 import { Md3Error } from "../../shared/errors/md3-error.js";
-import { jsonResult, TOOL_OUTPUT_SCHEMA, toolError } from "../../shared/mcp/tool-result.js";
+import { toolError, toolResult } from "../../shared/mcp/tool-result.js";
 import { decodeCursor, encodeCursor } from "../../shared/pagination/cursor.js";
+
+const searchOutputSchema = z.object({
+  hits: z.array(
+    z.object({
+      rank: z.number().int().positive(),
+      title: z.string(),
+      snippet: z.string(),
+      path: z.string(),
+      category: z.enum(CATEGORIES),
+      section: z.string().optional(),
+      sourceUrl: z.string().url(),
+    }),
+  ),
+  nextCursor: z.string().optional(),
+});
 
 export function registerSearchFeature(server: McpServer, client: Md3Client): void {
   server.registerTool(
@@ -11,14 +26,14 @@ export function registerSearchFeature(server: McpServer, client: Md3Client): voi
     {
       title: "Search Material Design 3 documentation",
       description:
-        "Search the live Material Design 3 site, restricted to Foundations, Styles, and Components.",
+        "Search official MD3 content and return clean, ranked results. Use get_md3_context when several sources should be gathered for a task.",
       inputSchema: z.object({
         query: z.string().trim().min(1).max(200),
         category: z.enum(CATEGORIES).optional(),
         limit: z.number().int().min(1).max(20).default(10),
         cursor: z.string().max(2048).optional(),
       }),
-      outputSchema: TOOL_OUTPUT_SCHEMA,
+      outputSchema: searchOutputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ query, category, limit, cursor }) => {
@@ -34,8 +49,16 @@ export function registerSearchFeature(server: McpServer, client: Md3Client): voi
           itemOffset = decoded.itemOffset;
         }
         const result = await client.search(query, category, start, limit, itemOffset);
-        return jsonResult({
-          hits: result.hits,
+        return toolResult({
+          hits: result.hits.map((hit, index) => ({
+            rank: index + 1,
+            title: hit.title,
+            snippet: hit.snippet,
+            path: hit.path,
+            category: hit.category,
+            ...(hit.section ? { section: hit.section } : {}),
+            sourceUrl: hit.url,
+          })),
           ...(result.nextStart
             ? {
                 nextCursor: encodeCursor({

@@ -78,4 +78,5 @@ export interface SearchHit {
   path: string;
   url: string;
   category: Category;
+  section?: string;
 }

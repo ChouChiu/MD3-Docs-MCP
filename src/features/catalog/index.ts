@@ -1,1 +1,1 @@
-export { registerCatalogFeature } from "./register-catalog-tool.js";
+export { registerBrowseFeature } from "./register-browse-tool.js";

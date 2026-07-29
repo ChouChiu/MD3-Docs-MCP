@@ -3,22 +3,39 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
 import { CATEGORIES, type Md3Client } from "../../infrastructure/material/index.js";
 import { Md3Error } from "../../shared/errors/md3-error.js";
-import { jsonResult, TOOL_OUTPUT_SCHEMA, toolError } from "../../shared/mcp/tool-result.js";
+import { toolError, toolResult } from "../../shared/mcp/tool-result.js";
 import { decodeCursor, encodeCursor } from "../../shared/pagination/cursor.js";
 
-export function registerCatalogFeature(server: McpServer, client: Md3Client): void {
+const browseOutputSchema = z.object({
+  entries: z.array(
+    z.object({
+      title: z.string(),
+      path: z.string(),
+      category: z.enum(CATEGORIES),
+      sections: z.array(z.string()),
+      description: z.string().optional(),
+      updatedAt: z.string().optional(),
+      sourceUrl: z.string().url(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().optional(),
+});
+
+export function registerBrowseFeature(server: McpServer, client: Md3Client): void {
   server.registerTool(
-    "list_md3_docs",
+    "browse_md3_docs",
     {
-      title: "List Material Design 3 documentation",
-      description: "List live Material Design 3 Foundations, Styles, and Components documents.",
+      title: "Browse Material Design 3 documentation",
+      description:
+        "Browse the official MD3 directory by category or canonical path prefix. Use search_md3_docs for natural-language discovery.",
       inputSchema: z.object({
         category: z.enum(CATEGORIES).optional(),
-        prefix: z.string().max(200).optional(),
+        prefix: z.string().trim().max(200).optional(),
         limit: z.number().int().min(1).max(100).default(50),
         cursor: z.string().max(2048).optional(),
       }),
-      outputSchema: TOOL_OUTPUT_SCHEMA,
+      outputSchema: browseOutputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ category, prefix, limit, cursor }) => {
@@ -44,9 +61,17 @@ export function registerCatalogFeature(server: McpServer, client: Md3Client): vo
           }
           offset = decoded.offset;
         }
-        const entries = filtered.slice(offset, offset + limit);
+        const entries = filtered.slice(offset, offset + limit).map((entry) => ({
+          title: entry.title,
+          path: entry.path,
+          category: entry.category,
+          sections: entry.tabs,
+          ...(entry.description ? { description: entry.description } : {}),
+          ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}),
+          sourceUrl: entry.url,
+        }));
         const nextOffset = offset + entries.length;
-        return jsonResult({
+        return toolResult({
           entries,
           total: filtered.length,
           ...(nextOffset < filtered.length
