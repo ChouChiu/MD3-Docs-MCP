@@ -1,28 +1,25 @@
+import { createHash } from "node:crypto";
 import { NodeHtmlMarkdown } from "node-html-markdown";
+import type { ContentChunk, DocumentData } from "../../infrastructure/material/types.js";
+import { mapConcurrent } from "../../shared/async/map-concurrent.js";
 import type {
-  ContentChunk,
-  ContentSection,
-  DocumentData,
-  ResolvedDocument,
-} from "../../infrastructure/material/types.js";
-import { Md3Error } from "../../shared/errors/md3-error.js";
-import type { MediaItem, RenderedDocument } from "./types.js";
+  MediaItem,
+  SemanticBlock,
+  SemanticChunk,
+  SemanticDocument,
+  SemanticSection,
+} from "./types.js";
 
-const converter = new NodeHtmlMarkdown(
-  {
-    bulletMarker: "-",
-    codeBlockStyle: "fenced",
-    keepDataImages: false,
-    maxConsecutiveNewlines: 2,
-    useInlineLinks: true,
-  },
-  undefined,
-  undefined,
-);
+const converter = new NodeHtmlMarkdown({
+  bulletMarker: "-",
+  codeBlockStyle: "fenced",
+  keepDataImages: false,
+  maxConsecutiveNewlines: 2,
+  useInlineLinks: true,
+});
 
 function htmlToMarkdown(html: string | null | undefined): string {
-  if (!html) return "";
-  return converter.translate(html).trim();
+  return html ? converter.translate(html).trim() : "";
 }
 
 function mediaMarkdown(item: MediaItem): string {
@@ -98,85 +95,109 @@ function renderResource(resource: unknown): string {
   return lines.join("\n");
 }
 
-export async function renderDocument(
-  document: DocumentData,
-  resolved: ResolvedDocument,
-  carbonVersion: string,
-  loadResource: (name: string) => Promise<unknown>,
-): Promise<RenderedDocument> {
-  const availableSections = document.sections
-    .filter((section) => section.isVisible !== false && section.name)
-    .map((section) => String(section.name));
-  const chosenSections = selectSections(document.sections, resolved.section);
-  const media: MediaItem[] = [];
-  const output: string[] = [`# ${document.title}`];
-  if (document.description) output.push(document.description);
+function stableId(...parts: Array<string | number>): string {
+  return createHash("sha256").update(parts.join(":")).digest("base64url").slice(0, 16);
+}
 
-  for (const section of chosenSections) {
-    if (section.name) output.push(`## ${section.name}`);
-    for (const block of section.contentBlocks ?? []) {
-      if (block.isHidden) continue;
-      if (block.title) output.push(`### ${block.title}`);
-      for (const chunk of block.contentChunks ?? []) {
-        const text = htmlToMarkdown(chunk.htmlValue);
-        if (text) output.push(text);
-        if (chunk.snippetCode) {
-          output.push(`\`\`\`${chunk.snippetLanguage ?? ""}\n${chunk.snippetCode}\n\`\`\``);
-        }
-        if (chunk.resourceName) {
-          try {
-            const resource = await loadResource(chunk.resourceName);
-            const resourceMarkdown = renderResource(resource);
-            if (resourceMarkdown) output.push(resourceMarkdown);
-          } catch {
-            output.push(`Resource data: \`${chunk.resourceName}\` (currently unavailable)`);
-          }
-        }
-        const chunkItems = chunkMedia(chunk);
-        media.push(...chunkItems);
-        output.push(...chunkItems.map(mediaMarkdown));
-        if (chunk.footer && chunkItems.length === 0) {
-          const footer = htmlToMarkdown(chunk.footer);
-          if (footer) output.push(footer);
-        }
-        if (chunk.linkUrl && !chunkItems.some((item) => item.url === chunk.linkUrl)) {
-          output.push(`[Related resource](${chunk.linkUrl})`);
-        }
-      }
+function renderChunk(
+  chunk: ContentChunk,
+  id: string,
+  resources: ReadonlyMap<string, unknown>,
+  unavailableResources: ReadonlySet<string>,
+): SemanticChunk {
+  const output: string[] = [];
+  const text = htmlToMarkdown(chunk.htmlValue);
+  if (text) output.push(text);
+  if (chunk.snippetCode) {
+    output.push(`\`\`\`${chunk.snippetLanguage ?? ""}\n${chunk.snippetCode}\n\`\`\``);
+  }
+  if (chunk.resourceName) {
+    const resourceMarkdown = renderResource(resources.get(chunk.resourceName));
+    if (resourceMarkdown) output.push(resourceMarkdown);
+    else if (unavailableResources.has(chunk.resourceName)) {
+      output.push(`Resource data: \`${chunk.resourceName}\` (currently unavailable)`);
     }
   }
-
-  const section = resolved.section;
-  const canonicalPath = resolved.canonicalPath;
+  const media = chunkMedia(chunk);
+  output.push(...media.map(mediaMarkdown));
+  if (chunk.footer && media.length === 0) {
+    const footer = htmlToMarkdown(chunk.footer);
+    if (footer) output.push(footer);
+  }
+  if (chunk.linkUrl && !media.some((item) => item.url === chunk.linkUrl)) {
+    output.push(`[Related resource](${chunk.linkUrl})`);
+  }
   return {
-    title: document.title,
-    canonicalPath,
-    sourceUrl: `https://m3.material.io/${canonicalPath}`,
-    ...(section ? { section } : {}),
-    ...(document.updatedTimestamp ? { updatedAt: document.updatedTimestamp } : {}),
-    availableSections,
+    id,
     markdown: output
       .filter(Boolean)
       .join("\n\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim(),
     media,
-    carbonVersion,
   };
 }
 
-function selectSections(sections: ContentSection[], requested?: string): ContentSection[] {
-  const visible = sections.filter((section) => section.isVisible !== false);
-  if (!requested) return visible;
-  const normalized = requested.trim().toLowerCase().replace(/-/g, " ");
-  const selected = visible.filter(
-    (section) => section.name?.trim().toLowerCase().replace(/-/g, " ") === normalized,
-  );
-  if (selected.length === 0) {
-    throw new Md3Error("NOT_FOUND", "Requested document section was not found", {
-      section: requested,
-      availableSections: visible.flatMap((section) => (section.name ? [section.name] : [])),
+export async function renderDocument(
+  document: DocumentData,
+  basePath: string,
+  carbonVersion: string,
+  loadResource: (name: string) => Promise<unknown>,
+): Promise<SemanticDocument> {
+  const visibleSections = document.sections.filter((section) => section.isVisible !== false);
+  const resourceNames = [
+    ...new Set(
+      visibleSections.flatMap((section) =>
+        (section.contentBlocks ?? []).flatMap((block) =>
+          (block.contentChunks ?? []).flatMap((chunk) =>
+            chunk.resourceName ? [chunk.resourceName] : [],
+          ),
+        ),
+      ),
+    ),
+  ];
+  const resources = new Map<string, unknown>();
+  const unavailableResources = new Set<string>();
+  await mapConcurrent(resourceNames, 4, async (name) => {
+    try {
+      resources.set(name, await loadResource(name));
+    } catch {
+      unavailableResources.add(name);
+    }
+  });
+
+  const sections: SemanticSection[] = visibleSections.map((section, sectionIndex) => {
+    const name = section.name?.trim() || `Section ${sectionIndex + 1}`;
+    const blocks: SemanticBlock[] = (section.contentBlocks ?? []).flatMap((block, blockIndex) => {
+      if (block.isHidden) return [];
+      const chunks = (block.contentChunks ?? [])
+        .map((chunk, chunkIndex) =>
+          renderChunk(
+            chunk,
+            stableId(carbonVersion, basePath, sectionIndex, blockIndex, chunkIndex),
+            resources,
+            unavailableResources,
+          ),
+        )
+        .filter((chunk) => chunk.markdown || chunk.media.length > 0);
+      if (chunks.length === 0 && !block.title) return [];
+      return [
+        {
+          id: stableId(carbonVersion, basePath, sectionIndex, blockIndex),
+          ...(block.title ? { heading: block.title } : {}),
+          chunks,
+        },
+      ];
     });
-  }
-  return selected;
+    return { name, blocks };
+  });
+
+  return {
+    title: document.title,
+    ...(document.description ? { description: document.description } : {}),
+    basePath,
+    ...(document.updatedTimestamp ? { updatedAt: document.updatedTimestamp } : {}),
+    sections,
+    carbonVersion,
+  };
 }
