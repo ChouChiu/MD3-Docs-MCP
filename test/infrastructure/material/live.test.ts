@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ContextService } from "../../../src/features/context/index.js";
 import { DocumentService } from "../../../src/features/document/index.js";
 import { Md3Client } from "../../../src/infrastructure/material/index.js";
 
@@ -22,4 +23,17 @@ test("live Material 3 sitemap, search, and document endpoints", {
   assert.equal(document.section, "Guidelines");
   assert.match(document.markdown, /button/i);
   assert.equal(document.sourceUrl, "https://m3.material.io/components/buttons/guidelines");
+
+  const context = await new ContextService(client, documents).getContext({
+    task: "button accessibility guidance",
+    mode: "review",
+    paths: ["components/buttons/accessibility"],
+    category: "components",
+    maxSources: 2,
+    maxCharacters: 4_000,
+  });
+  assert.match(context.markdown, /\[S1\]/);
+  assert.ok(
+    context.sources.every((source) => source.sourceUrl.startsWith("https://m3.material.io/")),
+  );
 });

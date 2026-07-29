@@ -27,6 +27,20 @@ test("document feature selects the requested tab", async () => {
   assert.doesNotMatch(document.markdown, /important actions/);
 });
 
+test("document feature selects an exact nested heading", async () => {
+  const client = new Md3Client({ fetcher: createFixtureFetch() });
+  const documents = new DocumentService(client);
+  const document = await documents.readDocument(
+    "components/buttons/guidelines",
+    undefined,
+    "Labels",
+  );
+
+  assert.deepEqual(document.availableHeadings, ["Labels"]);
+  assert.match(document.markdown, /Keep labels concise/);
+  assert.doesNotMatch(document.markdown, /important actions/);
+});
+
 test("document feature rejects a missing section on a route without tabs", async () => {
   const fixtureFetch = createFixtureFetch();
   const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {

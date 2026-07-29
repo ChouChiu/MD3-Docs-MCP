@@ -87,3 +87,30 @@ test("search does not emit a cursor at the exact end of the results", async () =
   assert.equal(result.nextStart, undefined);
   assert.equal(result.nextItemOffset, undefined);
 });
+
+test("search removes markup, site chrome, and duplicate paths", async () => {
+  const fetcher = (async () =>
+    new Response(
+      JSON.stringify({
+        items: [
+          {
+            title: "<b>Buttons</b> – Material Design 3",
+            link: "https://m3.material.io/components/buttons/guidelines",
+            snippet: "Use &amp; review. link Copy link Link copied",
+          },
+          {
+            title: "Duplicate",
+            link: "https://m3.material.io/components/buttons/guidelines",
+            snippet: "Duplicate",
+          },
+        ],
+      }),
+    )) as typeof fetch;
+  const client = new Md3Client({ fetcher });
+  const result = await client.search("buttons", undefined, 1, 10);
+
+  assert.equal(result.hits.length, 1);
+  assert.equal(result.hits[0]?.title, "Buttons – Material Design 3");
+  assert.equal(result.hits[0]?.snippet, "Use & review.");
+  assert.equal(result.hits[0]?.section, "Guidelines");
+});

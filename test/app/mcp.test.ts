@@ -7,7 +7,7 @@ import { Md3Client } from "../../src/infrastructure/material/index.js";
 import { encodeCursor } from "../../src/shared/pagination/cursor.js";
 import { createFixtureFetch } from "../infrastructure/material/fixtures.js";
 
-test("MCP tools and resources work over an in-memory transport", async () => {
+test("MCP v2 tools work over an in-memory transport", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = createMd3Server(new Md3Client({ fetcher: createFixtureFetch() }));
   const client = new Client({ name: "md3-docs-test", version: "1.0.0" });
@@ -15,12 +15,26 @@ test("MCP tools and resources work over an in-memory transport", async () => {
   await server.connect(serverTransport);
   await client.connect(clientTransport);
   try {
+    assert.equal(client.getServerVersion()?.version, "2.0.0");
+    assert.equal(client.getServerCapabilities()?.resources, undefined);
     const tools = await client.listTools();
     assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
-      "list_md3_docs",
+      "browse_md3_docs",
+      "get_md3_context",
       "read_md3_doc",
       "search_md3_docs",
     ]);
+    assert.ok(tools.tools.every((tool) => tool.outputSchema));
+
+    const browse = await client.callTool({
+      name: "browse_md3_docs",
+      arguments: { category: "components", limit: 1 },
+    });
+    assert.equal(browse.isError, undefined);
+    assert.equal(
+      (browse.structuredContent as { entries: Array<{ path: string }> }).entries[0]?.path,
+      "components/buttons/guidelines",
+    );
 
     const result = await client.callTool({
       name: "read_md3_doc",
@@ -35,10 +49,11 @@ test("MCP tools and resources work over an in-memory transport", async () => {
         path: "components/buttons/guidelines",
         cursor: encodeCursor({
           kind: "read",
-          offset: 1,
+          page: 1,
           path: "components/buttons/guidelines",
           section: "Guidelines",
           version: "old-version",
+          maxCharacters: 12_000,
         }),
       },
     });
@@ -48,14 +63,23 @@ test("MCP tools and resources work over an in-memory transport", async () => {
       /CURSOR_STALE/,
     );
 
-    const resources = await client.listResources();
-    assert.equal(resources.resources.length, 3);
-    const resource = await client.readResource({
-      uri: "md3-docs://docs/components/buttons/guidelines",
+    const context = await client.callTool({
+      name: "get_md3_context",
+      arguments: {
+        task: "Review button labels",
+        mode: "review",
+        paths: ["components/buttons/guidelines"],
+        maxCharacters: 4_000,
+      },
     });
-    const content = resource.contents[0];
-    assert.ok(content && "text" in content);
-    assert.match(content.text, /Keep labels concise/);
+    assert.equal(context.isError, undefined);
+    const contextContent = context.structuredContent as {
+      markdown: string;
+      sources: Array<{ id: string; sourceUrl: string }>;
+    };
+    assert.match(contextContent.markdown, /\[S1\]/);
+    assert.match(contextContent.markdown, /Keep labels concise/);
+    assert.ok(contextContent.sources[0]?.sourceUrl.startsWith("https://m3.material.io/"));
   } finally {
     await client.close();
     await server.close();

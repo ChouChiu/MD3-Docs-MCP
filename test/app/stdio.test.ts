@@ -8,7 +8,7 @@ test("package CLI serves MCP over a real stdio child process", {
 }, async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ["bin/md3-docs-mcp.js"],
+    args: ["dist/index.js"],
     cwd: process.cwd(),
     stderr: "pipe",
   });
@@ -18,7 +18,8 @@ test("package CLI serves MCP over a real stdio child process", {
   try {
     const tools = await client.listTools();
     assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
-      "list_md3_docs",
+      "browse_md3_docs",
+      "get_md3_context",
       "read_md3_doc",
       "search_md3_docs",
     ]);

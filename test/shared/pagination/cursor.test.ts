@@ -22,7 +22,13 @@ test("cursor round-trips valid data", () => {
 
 test("cursor rejects malformed fields and unexpected properties", () => {
   for (const value of [
-    { kind: "read", offset: "1", path: "components/buttons", version: "v1" },
+    {
+      kind: "read",
+      page: "1",
+      path: "components/buttons",
+      version: "v1",
+      maxCharacters: 12_000,
+    },
     { kind: "list", offset: -1, fingerprint: "hash" },
     { kind: "search", start: 1, itemOffset: 0, query: "x", unexpected: true },
   ]) {
