@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { createMd3Server } from "./app/create-server.js";
 
