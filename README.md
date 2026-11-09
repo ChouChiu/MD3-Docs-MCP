@@ -81,6 +81,8 @@ Search the official site using natural language.
 
 Search results are deduplicated and cleaned of HTML and site-navigation noise. Each result
 contains a stable rank, canonical path, optional section, concise snippet, and source URL.
+Pass `cursor` from the preceding page to continue; cursors are bound to the query and
+category.
 
 ### `read_md3_doc`
 
@@ -138,8 +140,10 @@ candidate documents concurrently and ranks intact semantic blocks by task releva
 - `research` follows query relevance without imposing a workflow-specific section order.
 
 Context excerpts use source labels such as `[S1]`; the structured result maps every label to
-its official URL. A failed candidate becomes a warning when other evidence is available.
-The tool returns an error only when it cannot produce any usable official evidence.
+its official URL. Sources and checklist items that do not survive the character budget are
+omitted rather than reported without a citation. A failed candidate becomes a warning when
+other evidence is available. The tool returns an error only when it cannot produce any
+usable official evidence.
 
 The character budget applies to the Markdown body, not protocol metadata.
 
@@ -186,24 +190,34 @@ bun run build
 Development uses Bun for dependency and script management. Published packages contain
 compiled JavaScript in `dist/`; runtime users do not install TypeScript or `tsx`.
 
-The source is feature-driven:
+The source is feature-driven: each feature owns its tool registration, service, and
+supporting modules, while the live-site client and shared capabilities stay outside the
+features.
 
 ```text
 src/
 ├── app/                    # Server composition
 ├── features/
 │   ├── catalog/            # browse_md3_docs
-│   ├── context/            # get_md3_context and evidence ranking
-│   ├── document/           # semantic model, rendering, and read_md3_doc
+│   ├── context/            # get_md3_context, evidence ranking, and budgets
+│   ├── document/           # Semantic model, rendering, and read_md3_doc
+│   │   └── markdown/       # Heading selection, safe splitting, pagination
 │   └── search/             # search_md3_docs
 ├── infrastructure/
-│   └── material/           # Live Material site client and parsers
-└── shared/                 # Cache, HTTP, errors, cursors, concurrency, version
+│   └── material/           # Live Material site client
+│       └── parsers/        # Site index, sitemap, document, path, and search parsers
+├── shared/                 # Cache, HTTP, errors, cursors, concurrency, text, version
+└── test/                   # Offline and opt-in live tests, grouped by subject
 ```
 
-Offline tests cover protocol contracts, semantic pagination, ranking, caching, retries,
-compiled CLI startup, and the packed npm artifact. Live tests contact `m3.material.io`
-only when `MD3_LIVE_TESTS=1`.
+Tests live in `src/test/` next to the code but are grouped by subject rather than
+mirroring the feature tree, so a subject change touches one test file. `tsconfig.build.json`
+excludes them: the published `dist/` contains runtime code only.
+
+Coverage includes protocol contracts, both supported search payload shapes, heading
+selection across content blocks, semantic pagination, ranking, caching, retries, path
+validation, compiled CLI startup, and the packed npm artifact. Live tests contact
+`m3.material.io` only when `MD3_LIVE_TESTS=1`.
 
 ## Migrating from v1
 
