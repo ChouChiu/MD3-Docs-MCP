@@ -4,6 +4,14 @@
   "description": "A stdio MCP server for live Material Design 3 documentation",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChouChiu/MD3-Docs-MCP.git"
+  },
+  "homepage": "https://github.com/ChouChiu/MD3-Docs-MCP#readme",
+  "bugs": {
+    "url": "https://github.com/ChouChiu/MD3-Docs-MCP/issues"
+  },
   "bin": {
     "md3-docs-mcp": "dist/index.js"
   },
