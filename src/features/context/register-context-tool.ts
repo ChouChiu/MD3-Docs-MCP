@@ -24,7 +24,6 @@ const contextOutputSchema = z.object({
     z.object({
       criterion: z.string(),
       sourceId: z.string(),
-      sourceUrl: z.string().url(),
     }),
   ),
   warnings: z.array(z.string()),
@@ -43,8 +42,8 @@ export function registerContextFeature(server: McpServer, contexts: ContextServi
         mode: contextModeSchema.default("research"),
         paths: z.array(z.string().trim().min(1).max(500)).max(5).default([]),
         category: z.enum(CATEGORIES).optional(),
-        maxSources: z.number().int().min(1).max(8).default(5),
-        maxCharacters: z.number().int().min(4_000).max(40_000).default(20_000),
+        maxSources: z.number().int().min(1).max(8).default(4),
+        maxCharacters: z.number().int().min(4_000).max(40_000).default(12_000),
       }),
       outputSchema: contextOutputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },

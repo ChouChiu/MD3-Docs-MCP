@@ -6,15 +6,6 @@ import { decodeCursor, encodeCursor } from "../../shared/pagination/cursor.js";
 import type { DocumentService } from "./document-service.js";
 import { paginateDocument } from "./markdown/index.js";
 
-const mediaSchema = z.object({
-  type: z.enum(["image", "video", "prototype", "code"]),
-  url: z.string(),
-  alt: z.string().optional(),
-  caption: z.string().optional(),
-  width: z.number().positive().optional(),
-  height: z.number().positive().optional(),
-});
-
 const readOutputSchema = z.object({
   title: z.string(),
   path: z.string(),
@@ -22,10 +13,9 @@ const readOutputSchema = z.object({
   section: z.string().optional(),
   updatedAt: z.string().optional(),
   contentVersion: z.string(),
-  availableSections: z.array(z.string()),
-  availableHeadings: z.array(z.string()),
+  availableSections: z.array(z.string()).optional(),
+  availableHeadings: z.array(z.string()).optional(),
   markdown: z.string(),
-  media: z.array(mediaSchema),
   contentRange: z.object({
     page: z.number().int().nonnegative(),
     totalPages: z.number().int().positive(),
@@ -42,18 +32,19 @@ export function registerDocumentFeature(server: McpServer, documents: DocumentSe
     {
       title: "Read Material Design 3 documentation",
       description:
-        "Read one official MD3 document or section as intact semantic Markdown. Use heading to focus a subsection and nextCursor to continue without broken tables or code fences.",
+        "Read one official MD3 document or section as intact semantic Markdown. Use heading to focus a subsection and nextCursor to continue without broken tables or code fences. Set includeOutline on a continuation page to get the document outline again.",
       inputSchema: z.object({
         path: z.string().trim().min(1).max(500),
         section: z.string().trim().min(1).max(100).optional(),
         heading: z.string().trim().min(1).max(200).optional(),
-        maxCharacters: z.number().int().min(1_000).max(30_000).default(12_000),
+        maxCharacters: z.number().int().min(1_000).max(30_000).default(8_000),
         cursor: z.string().max(4096).optional(),
+        includeOutline: z.boolean().default(false),
       }),
       outputSchema: readOutputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    async ({ path, section, heading, maxCharacters, cursor }) => {
+    async ({ path, section, heading, maxCharacters, cursor, includeOutline }) => {
       try {
         const document = await documents.readDocument(path, section, heading);
         let page = 0;
@@ -85,10 +76,15 @@ export function registerDocumentFeature(server: McpServer, documents: DocumentSe
           ...(document.section ? { section: document.section } : {}),
           ...(document.updatedAt ? { updatedAt: document.updatedAt } : {}),
           contentVersion: document.carbonVersion,
-          availableSections: document.availableSections,
-          availableHeadings: document.availableHeadings,
+          // The outline is orientation for the first page only; a continuation page carries
+          // it again just when the caller asks, instead of on every page by default.
+          ...(page === 0 || includeOutline
+            ? {
+                availableSections: document.availableSections,
+                availableHeadings: document.availableHeadings,
+              }
+            : {}),
           markdown: selected.markdown,
-          media: document.media,
           contentRange: {
             page,
             totalPages: pages.length,

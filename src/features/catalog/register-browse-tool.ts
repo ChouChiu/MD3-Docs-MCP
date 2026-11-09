@@ -19,7 +19,6 @@ const browseOutputSchema = z.object({
       sections: z.array(z.string()),
       description: z.string().optional(),
       updatedAt: z.string().optional(),
-      sourceUrl: z.string().url(),
     }),
   ),
   total: z.number().int().nonnegative(),
@@ -36,7 +35,7 @@ export function registerBrowseFeature(server: McpServer, client: Md3Client): voi
       inputSchema: z.object({
         category: z.enum(CATEGORIES).optional(),
         prefix: z.string().trim().max(200).optional(),
-        limit: z.number().int().min(1).max(100).default(50),
+        limit: z.number().int().min(1).max(100).default(20),
         cursor: z.string().max(2048).optional(),
       }),
       outputSchema: browseOutputSchema,
@@ -72,22 +71,31 @@ export function registerBrowseFeature(server: McpServer, client: Md3Client): voi
           sections: entry.tabs,
           ...(entry.description ? { description: entry.description } : {}),
           ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}),
-          sourceUrl: entry.url,
         }));
         const nextOffset = offset + entries.length;
-        return toolResult({
-          entries,
-          total: filtered.length,
-          ...(nextOffset < filtered.length
-            ? {
-                nextCursor: encodeCursor({
-                  kind: "list",
-                  offset: nextOffset,
-                  fingerprint,
-                }),
-              }
-            : {}),
-        });
+        // Line-oriented text: the model reads tab-separated facts, not JSON keys.
+        const text = [
+          `${offset + 1}-${nextOffset} of ${filtered.length}`,
+          ...entries.map((entry) =>
+            [entry.path, entry.title, entry.sections.join(",")].filter(Boolean).join("\t"),
+          ),
+        ].join("\n");
+        return toolResult(
+          {
+            entries,
+            total: filtered.length,
+            ...(nextOffset < filtered.length
+              ? {
+                  nextCursor: encodeCursor({
+                    kind: "list",
+                    offset: nextOffset,
+                    fingerprint,
+                  }),
+                }
+              : {}),
+          },
+          text,
+        );
       } catch (error) {
         return toolError(error);
       }

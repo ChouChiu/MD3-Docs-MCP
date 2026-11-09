@@ -251,3 +251,69 @@ test("browse prefix filters the directory before pagination", async () => {
     assert.ok(content.entries.every((entry) => entry.path.startsWith("components/buttons/")));
   });
 });
+
+test("read returns the outline on a continuation page only when asked", async () => {
+  const largeDocument = {
+    title: "Buttons",
+    sections: [
+      {
+        name: "Guidelines",
+        isVisible: true,
+        contentBlocks: Array.from({ length: 30 }, (_, index) => ({
+          title: `Block ${index}`,
+          contentChunks: [{ htmlValue: `<p>${"keep labels concise. ".repeat(12)}</p>` }],
+        })),
+      },
+    ],
+  };
+  const baseFetcher = createFixtureFetch();
+  const fetcher = (async (input: string | URL | Request) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input.toString() : input.url,
+    );
+    if (url.pathname.endsWith("/buttons.json")) {
+      return new Response(JSON.stringify(largeDocument));
+    }
+    return baseFetcher(input);
+  }) as typeof fetch;
+
+  await withServer(fetcher, async (client) => {
+    const first = await client.callTool({
+      name: "read_md3_doc",
+      arguments: { path: "components/buttons/guidelines", maxCharacters: 1_000 },
+    });
+    const firstContent = first.structuredContent as {
+      availableHeadings?: string[];
+      nextCursor?: string;
+    };
+    assert.equal(firstContent.availableHeadings?.length, 30);
+    assert.ok(firstContent.nextCursor);
+
+    const plain = await client.callTool({
+      name: "read_md3_doc",
+      arguments: {
+        path: "components/buttons/guidelines",
+        maxCharacters: 1_000,
+        cursor: firstContent.nextCursor,
+      },
+    });
+    assert.equal(
+      (plain.structuredContent as { availableHeadings?: string[] }).availableHeadings,
+      undefined,
+    );
+
+    const outlined = await client.callTool({
+      name: "read_md3_doc",
+      arguments: {
+        path: "components/buttons/guidelines",
+        maxCharacters: 1_000,
+        cursor: firstContent.nextCursor,
+        includeOutline: true,
+      },
+    });
+    assert.deepEqual(
+      (outlined.structuredContent as { availableHeadings?: string[] }).availableHeadings,
+      Array.from({ length: 30 }, (_, index) => `Block ${index}`),
+    );
+  });
+});

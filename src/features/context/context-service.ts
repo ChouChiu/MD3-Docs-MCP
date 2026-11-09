@@ -23,7 +23,7 @@ import {
 } from "./ranking.js";
 import type { ChecklistItem, ContextRequest, ContextResult, ContextSource } from "./types.js";
 
-const CANDIDATE_CONCURRENCY = 4;
+const CANDIDATE_CONCURRENCY = 6;
 const MAX_CHECKLIST_ITEMS = 8;
 const CHECKLIST_BUDGET_RATIO = 0.2;
 const CHECKLIST_MAX_CHARACTERS = 2_500;
@@ -135,20 +135,30 @@ export class ContextService {
     }
 
     const candidates = [...expanded.values()].sort(byRelevance).slice(0, request.maxSources + 4);
-    const loaded = await mapConcurrent(candidates, CANDIDATE_CONCURRENCY, async (candidate) => {
-      try {
-        return {
-          candidate,
-          document: await this.#documents.readDocument(candidate.path),
-        } satisfies LoadedSource;
-      } catch (error) {
-        warn(`Document ${candidate.path} failed`, error);
-        return undefined;
+    // Read only what will be cited, topping up only when a candidate fails. Fetching four
+    // spare documents (plus every resource table they reference) on every call was the
+    // single largest source of latency here.
+    const successful: LoadedSource[] = [];
+    let cursor = 0;
+    while (successful.length < request.maxSources && cursor < candidates.length) {
+      const missing = request.maxSources - successful.length;
+      const batch = candidates.slice(cursor, cursor + missing * 2);
+      cursor += batch.length;
+      const results = await mapConcurrent(batch, CANDIDATE_CONCURRENCY, async (candidate) => {
+        try {
+          return {
+            candidate,
+            document: await this.#documents.readDocument(candidate.path),
+          } satisfies LoadedSource;
+        } catch (error) {
+          warn(`Document ${candidate.path} failed`, error);
+          return undefined;
+        }
+      });
+      for (const item of results) {
+        if (item && successful.length < request.maxSources) successful.push(item);
       }
-    });
-    const successful = loaded
-      .filter((item): item is LoadedSource => item !== undefined)
-      .slice(0, request.maxSources);
+    }
     if (successful.length === 0) {
       throw new Md3Error("UPSTREAM_HTTP", "No MD3 context sources could be loaded", { warnings });
     }
@@ -282,11 +292,7 @@ function reviewChecklist(evidence: readonly Evidence[]): ChecklistItem[] {
     const key = `${item.source.id}:${criterion}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    checklist.push({
-      criterion,
-      sourceId: item.source.id,
-      sourceUrl: item.source.sourceUrl,
-    });
+    checklist.push({ criterion, sourceId: item.source.id });
     if (checklist.length === MAX_CHECKLIST_ITEMS) break;
   }
   return checklist;
@@ -305,7 +311,14 @@ function composeContext(
   checklist: ChecklistItem[];
 } {
   const title = `# Material Design 3 context\n\nTask: ${request.task}\n\nMode: ${request.mode}`;
-  const checklistResult = checklistLines(request, checklist);
+  const sourceById = new Map(evidence.map((item) => [item.source.id, item.source]));
+  // One URL per source at the end, instead of repeating it under every excerpt.
+  const sourcesReserve =
+    [...sourceById.values()].reduce(
+      (total, source) => total + `- [${source.id}] ${source.sourceUrl}\n`.length,
+      "## Sources\n\n".length,
+    ) + 2;
+  const checklistResult = checklistLines(checklist, request.maxCharacters - sourcesReserve);
   let markdown = [title, checklistResult.markdown].filter(Boolean).join("\n\n");
   const cited = new Set<string>();
   for (const item of checklistResult.included) cited.add(item.sourceId);
@@ -315,9 +328,8 @@ function composeContext(
   for (const item of evidence) {
     const label = `## [${item.source.id}] ${item.source.title} — ${item.section}`;
     const heading = item.heading ? `\n\n### ${item.heading}` : "";
-    const sourceLine = `\n\nSource: ${item.source.sourceUrl}`;
-    const wrapperSize = markdown.length + 2 + label.length + heading.length + sourceLine.length + 2;
-    const available = request.maxCharacters - wrapperSize;
+    const wrapperSize = markdown.length + 2 + label.length + heading.length + 2;
+    const available = request.maxCharacters - sourcesReserve - wrapperSize;
     if (available < 100) {
       clipped = true;
       break;
@@ -325,8 +337,8 @@ function composeContext(
     const fragments = splitMarkdownSafely(item.markdown, available);
     const excerpt = fragments[0];
     if (!excerpt) continue;
-    const sectionMarkdown = `${label}${heading}${sourceLine}\n\n${excerpt}`;
-    if (`${markdown}\n\n${sectionMarkdown}`.length > request.maxCharacters) {
+    const sectionMarkdown = `${label}${heading}\n\n${excerpt}`;
+    if (`${markdown}\n\n${sectionMarkdown}`.length > request.maxCharacters - sourcesReserve) {
       clipped = true;
       continue;
     }
@@ -335,6 +347,13 @@ function composeContext(
     cited.add(item.source.id);
     if (fragments.length > 1) clipped = true;
   }
+  const usedSources = [...sourceById.values()].filter((source) => cited.has(source.id));
+  if (usedSources.length > 0) {
+    markdown = `${markdown}\n\n## Sources\n${usedSources
+      .map((source) => `- [${source.id}] ${source.sourceUrl}`)
+      .join("\n")}`;
+  }
+
   return {
     markdown,
     used,
@@ -345,15 +364,12 @@ function composeContext(
 }
 
 function checklistLines(
-  request: ContextRequest,
   checklist: readonly ChecklistItem[],
+  budget: number,
 ): { markdown: string; included: Set<ChecklistItem> } {
   const included = new Set<ChecklistItem>();
   if (checklist.length === 0) return { markdown: "", included };
-  const limit = Math.min(
-    CHECKLIST_MAX_CHARACTERS,
-    Math.floor(request.maxCharacters * CHECKLIST_BUDGET_RATIO),
-  );
+  const limit = Math.min(CHECKLIST_MAX_CHARACTERS, Math.floor(budget * CHECKLIST_BUDGET_RATIO));
   const lines = ["## Review checklist"];
   for (const item of checklist) {
     const next = `- [ ] ${item.criterion} [${item.sourceId}]`;

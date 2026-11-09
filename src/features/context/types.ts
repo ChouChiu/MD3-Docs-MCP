@@ -22,8 +22,8 @@ export interface ContextSource {
 
 export interface ChecklistItem {
   criterion: string;
+  /** Resolves through {@link ContextSource.id}; the URL lives on the source, once. */
   sourceId: string;
-  sourceUrl: string;
 }
 
 export interface ContextResult {

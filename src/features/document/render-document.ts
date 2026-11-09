@@ -16,7 +16,7 @@ import type {
   SemanticSection,
 } from "./types.js";
 
-const RESOURCE_CONCURRENCY = 4;
+const RESOURCE_CONCURRENCY = 6;
 
 const converter = new NodeHtmlMarkdown({
   bulletMarker: "-",

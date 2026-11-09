@@ -14,7 +14,6 @@ const searchOutputSchema = z.object({
       path: z.string(),
       category: z.enum(CATEGORIES),
       section: z.string().optional(),
-      sourceUrl: z.string().url(),
     }),
   ),
   nextCursor: z.string().optional(),
@@ -54,29 +53,36 @@ export function registerSearchFeature(server: McpServer, client: Md3Client): voi
           rankOffset = decoded.rankOffset;
         }
         const result = await client.search(query, category, start, limit, itemOffset);
-        return toolResult({
-          hits: result.hits.map((hit, index) => ({
-            rank: rankOffset + index + 1,
-            title: hit.title,
-            snippet: hit.snippet,
-            path: hit.path,
-            category: hit.category,
-            ...(hit.section ? { section: hit.section } : {}),
-            sourceUrl: hit.url,
-          })),
-          ...(result.nextStart
-            ? {
-                nextCursor: encodeCursor({
-                  kind: "search",
-                  start: result.nextStart,
-                  itemOffset: result.nextItemOffset ?? 0,
-                  rankOffset: rankOffset + result.hits.length,
-                  query,
-                  ...(category ? { category } : {}),
-                }),
-              }
-            : {}),
-        });
+        const hits = result.hits.map((hit, index) => ({
+          rank: rankOffset + index + 1,
+          title: hit.title,
+          snippet: hit.snippet,
+          path: hit.path,
+          category: hit.category,
+          ...(hit.section ? { section: hit.section } : {}),
+        }));
+        // Two lines per hit: rank/path/title, then the snippet indented under it.
+        const text = hits
+          .map((hit) => `${hit.rank}. ${hit.title} - ${hit.path}\n   ${hit.snippet}`)
+          .join("\n");
+        return toolResult(
+          {
+            hits,
+            ...(result.nextStart
+              ? {
+                  nextCursor: encodeCursor({
+                    kind: "search",
+                    start: result.nextStart,
+                    itemOffset: result.nextItemOffset ?? 0,
+                    rankOffset: rankOffset + result.hits.length,
+                    query,
+                    ...(category ? { category } : {}),
+                  }),
+                }
+              : {}),
+          },
+          text,
+        );
       } catch (error) {
         return toolError(error);
       }

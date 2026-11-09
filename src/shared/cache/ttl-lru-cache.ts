@@ -9,7 +9,7 @@ export class TtlLruCache {
   readonly #entries = new Map<string, CacheEntry<unknown>>();
   readonly #inflight = new Map<string, Promise<unknown>>();
 
-  constructor(ttlMs = 5 * 60_000, maxEntries = 256) {
+  constructor(ttlMs = 30 * 60_000, maxEntries = 256) {
     this.#ttlMs = ttlMs;
     this.#maxEntries = maxEntries;
   }

@@ -19,7 +19,8 @@ sources.
 | `read_md3_doc`    | Read one document or section as semantic Markdown, with heading focus and cursor pagination. |
 | `get_md3_context` | Gather several cited sources for implementation, review, or research work.                   |
 
-Every result carries its official source URL.
+`browse_md3_docs` and `search_md3_docs` return canonical paths (prefix them with
+`https://m3.material.io/`); `read_md3_doc` and `get_md3_context` return full source URLs.
 
 ## Quick start
 
@@ -52,8 +53,16 @@ stderr.
 
 ## Behavior
 
-- Reads the live site with a five-minute in-process cache; concurrent requests share one
-  upstream operation.
+- Reads the live site with a thirty-minute in-process cache keyed by the Carbon content
+  version, so a content revision invalidates entries on its own; concurrent requests share
+  one upstream operation.
+- Warms the directory at startup (`MD3_WARMUP=0` disables it) so the first browse or search
+  does not pay for the site index, main bundle, and sitemap.
+- Returns line-oriented text (one entry per line, tab-separated) instead of pretty-printed
+  JSON, keeps one URL per source instead of repeating it under every excerpt, and sends the
+  document outline on the first page of a paginated read (or again on request, through
+  `includeOutline`).
+- Context gathering reads only the documents it cites, topping up when a candidate fails.
 - Requests time out after ten seconds and retry transient failures once, honoring
   `Retry-After` up to ten seconds.
 - Pagination breaks only between sections, content blocks, paragraphs, tables, and complete
