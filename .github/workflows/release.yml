@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  # npm trusted publishing exchanges this token instead of a long-lived secret.
+  id-token: write
 
 env:
   BUN_VERSION: "1.3.14"
@@ -67,8 +69,6 @@ jobs:
         run: bun run test
 
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           release_package_spec="$(node --input-type=commonjs -p '
             const packageJson = require("./package.json");
@@ -78,7 +78,7 @@ jobs:
             echo "$release_package_spec is already published."
             exit 0
           fi
-          npm publish
+          npm publish --provenance --access public
 
       - name: Create GitHub release
         env:
