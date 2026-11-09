@@ -5,6 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createMd3Server } from "../app/create-server.js";
 import { Md3Client } from "../infrastructure/material/index.js";
 import { encodeCursor } from "../shared/pagination/cursor.js";
+import { APP_VERSION } from "../shared/version.js";
 import { createFixtureFetch } from "./fixtures.js";
 
 const TOOL_NAMES = ["browse_md3_docs", "get_md3_context", "read_md3_doc", "search_md3_docs"];
@@ -41,7 +42,8 @@ function searchReturns(payload: unknown): typeof fetch {
 
 test("MCP v2 tools work over an in-memory transport", async () => {
   await withServer(createFixtureFetch(), async (client) => {
-    assert.equal(client.getServerVersion()?.version, "2.0.0");
+    // Read the served version from package.json so a release bump cannot fail the suite.
+    assert.equal(client.getServerVersion()?.version, APP_VERSION);
     assert.equal(client.getServerCapabilities()?.resources, undefined);
     const tools = await client.listTools();
     assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), TOOL_NAMES);
