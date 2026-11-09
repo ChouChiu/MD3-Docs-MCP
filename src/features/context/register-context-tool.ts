@@ -1,9 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
-import { CATEGORIES, type Md3Client } from "../../infrastructure/material/index.js";
+import { CATEGORIES } from "../../infrastructure/material/index.js";
 import { toolError, toolResult } from "../../shared/mcp/tool-result.js";
-import type { DocumentService } from "../document/index.js";
-import { ContextService } from "./context-service.js";
+import type { ContextService } from "./context-service.js";
 
 const contextModeSchema = z.enum(["implementation", "review", "research"]);
 
@@ -32,12 +31,7 @@ const contextOutputSchema = z.object({
   truncated: z.boolean(),
 });
 
-export function registerContextFeature(
-  server: McpServer,
-  client: Md3Client,
-  documents: DocumentService,
-): void {
-  const contexts = new ContextService(client, documents);
+export function registerContextFeature(server: McpServer, contexts: ContextService): void {
   server.registerTool(
     "get_md3_context",
     {

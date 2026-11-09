@@ -2,6 +2,9 @@ export const CATEGORIES = ["foundations", "styles", "components"] as const;
 
 export type Category = (typeof CATEGORIES)[number];
 
+/** Upstream JSON is sparse: a field may be absent, null, or present. */
+type Nullish<T> = T | null | undefined;
+
 export interface RouteEntry {
   path: string;
   documentId: string;
@@ -27,42 +30,42 @@ export interface DirectoryEntry {
 }
 
 export interface ContentChunk {
-  htmlValue?: string | null;
-  footer?: string | null;
-  imageUrl?: string | null;
-  imageUrlFife?: string | null;
-  imageWidth?: number | null;
-  imageHeight?: number | null;
-  altText?: string | null;
-  videoUrl?: string | null;
-  videoWidth?: number | null;
-  videoHeight?: number | null;
-  prototypeUrl?: string | null;
-  codeUrl?: string | null;
-  linkUrl?: string | null;
-  snippetCode?: string | null;
-  snippetLanguage?: string | null;
-  resourceName?: string | null;
-  libraryModuleType?: string | null;
-  contentChunkType?: string | null;
+  htmlValue?: Nullish<string>;
+  footer?: Nullish<string>;
+  imageUrl?: Nullish<string>;
+  imageUrlFife?: Nullish<string>;
+  imageWidth?: Nullish<number>;
+  imageHeight?: Nullish<number>;
+  altText?: Nullish<string>;
+  videoUrl?: Nullish<string>;
+  videoWidth?: Nullish<number>;
+  videoHeight?: Nullish<number>;
+  prototypeUrl?: Nullish<string>;
+  codeUrl?: Nullish<string>;
+  linkUrl?: Nullish<string>;
+  snippetCode?: Nullish<string>;
+  snippetLanguage?: Nullish<string>;
+  resourceName?: Nullish<string>;
+  libraryModuleType?: Nullish<string>;
+  contentChunkType?: Nullish<string>;
 }
 
 export interface ContentBlock {
-  title?: string | null;
-  isHidden?: boolean;
-  contentChunks?: ContentChunk[];
+  title?: Nullish<string>;
+  isHidden?: boolean | undefined;
+  contentChunks?: Nullish<ContentChunk[]>;
 }
 
 export interface ContentSection {
-  name?: string | null;
-  isVisible?: boolean;
-  contentBlocks?: ContentBlock[];
+  name?: Nullish<string>;
+  isVisible?: boolean | undefined;
+  contentBlocks?: Nullish<ContentBlock[]>;
 }
 
 export interface DocumentData {
   title: string;
-  description?: string | null;
-  updatedTimestamp?: string | null;
+  description?: Nullish<string>;
+  updatedTimestamp?: Nullish<string>;
   sections: ContentSection[];
 }
 

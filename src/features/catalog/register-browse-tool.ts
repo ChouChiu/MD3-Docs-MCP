@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
-import { CATEGORIES, type Md3Client } from "../../infrastructure/material/index.js";
+import {
+  CATEGORIES,
+  type Md3Client,
+  normalizeLoosePath,
+} from "../../infrastructure/material/index.js";
 import { Md3Error } from "../../shared/errors/md3-error.js";
 import { toolError, toolResult } from "../../shared/mcp/tool-result.js";
 import { decodeCursor, encodeCursor } from "../../shared/pagination/cursor.js";
@@ -41,7 +45,7 @@ export function registerBrowseFeature(server: McpServer, client: Md3Client): voi
     async ({ category, prefix, limit, cursor }) => {
       try {
         const directory = await client.getDirectory();
-        const normalizedPrefix = prefix?.replace(/^\/+|\/+$/g, "").toLowerCase();
+        const normalizedPrefix = prefix ? normalizeLoosePath(prefix).toLowerCase() : undefined;
         const filtered = directory.filter(
           (entry) =>
             (!category || entry.category === category) &&

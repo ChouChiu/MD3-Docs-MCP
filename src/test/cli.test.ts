@@ -6,7 +6,29 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
-test("packed npm artifact runs from an installed package layout", { timeout: 30_000 }, async () => {
+const TOOL_NAMES = ["browse_md3_docs", "get_md3_context", "read_md3_doc", "search_md3_docs"];
+
+test("compiled CLI serves MCP over stdio", { timeout: 15_000 }, async () => {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: ["dist/index.js"],
+    cwd: process.cwd(),
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "md3-docs-stdio-test", version: "1.0.0" });
+
+  await client.connect(transport);
+  try {
+    const tools = await client.listTools();
+    assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), TOOL_NAMES);
+  } finally {
+    await client.close();
+  }
+});
+
+test("packed npm artifact runs from an installed package layout", {
+  timeout: 30_000,
+}, async () => {
   const cacheRoot = join(process.cwd(), ".cache");
   mkdirSync(cacheRoot, { recursive: true });
   const temporary = mkdtempSync(join(cacheRoot, "package-test-"));
@@ -32,16 +54,13 @@ test("packed npm artifact runs from an installed package layout", { timeout: 30_
 
     const executable = join(packageRoot, "dist", "index.js");
     chmodSync(executable, 0o755);
-    const transport = new StdioClientTransport({
-      command: executable,
-      cwd: temporary,
-      stderr: "pipe",
-    });
     const client = new Client({ name: "packed-md3-docs-test", version: "1.0.0" });
-    await client.connect(transport);
+    await client.connect(
+      new StdioClientTransport({ command: executable, cwd: temporary, stderr: "pipe" }),
+    );
     try {
       const tools = await client.listTools();
-      assert.equal(tools.tools.length, 4);
+      assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), TOOL_NAMES);
     } finally {
       await client.close();
     }

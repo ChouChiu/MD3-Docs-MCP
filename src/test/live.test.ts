@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ContextService } from "../../../src/features/context/index.js";
-import { DocumentService } from "../../../src/features/document/index.js";
-import { Md3Client } from "../../../src/infrastructure/material/index.js";
+import { ContextService } from "../features/context/index.js";
+import { DocumentService } from "../features/document/index.js";
+import { Md3Client } from "../infrastructure/material/index.js";
 
 test("live Material 3 sitemap, search, and document endpoints", {
   skip: process.env.MD3_LIVE_TESTS !== "1",
@@ -23,6 +23,18 @@ test("live Material 3 sitemap, search, and document endpoints", {
   assert.equal(document.section, "Guidelines");
   assert.match(document.markdown, /button/i);
   assert.equal(document.sourceUrl, "https://m3.material.io/components/buttons/guidelines");
+
+  // A heading's body continues across content blocks; selection must not stop at the
+  // first block that carries the heading markup.
+  const heading = document.availableHeadings[0];
+  assert.ok(heading);
+  const selection = await documents.readDocument(
+    "components/buttons/guidelines",
+    undefined,
+    heading,
+  );
+  assert.ok(selection.markdown.length > 0);
+  assert.ok(selection.markdown.length <= document.markdown.length);
 
   const context = await new ContextService(client, documents).getContext({
     task: "button accessibility guidance",

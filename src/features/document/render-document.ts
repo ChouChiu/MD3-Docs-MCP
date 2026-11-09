@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { NodeHtmlMarkdown } from "node-html-markdown";
-import type { ContentChunk, DocumentData } from "../../infrastructure/material/types.js";
+import type {
+  ContentChunk,
+  ContentSection,
+  DocumentData,
+} from "../../infrastructure/material/types.js";
 import { mapConcurrent } from "../../shared/async/map-concurrent.js";
+import { joinMarkdown } from "./markdown/join.js";
+import { renderResource } from "./render-resource.js";
 import type {
   MediaItem,
   SemanticBlock,
@@ -9,6 +15,8 @@ import type {
   SemanticDocument,
   SemanticSection,
 } from "./types.js";
+
+const RESOURCE_CONCURRENCY = 4;
 
 const converter = new NodeHtmlMarkdown({
   bulletMarker: "-",
@@ -18,7 +26,7 @@ const converter = new NodeHtmlMarkdown({
   useInlineLinks: true,
 });
 
-function htmlToMarkdown(html: string | null | undefined): string {
+export function htmlToMarkdown(html: string | null | undefined): string {
   return html ? converter.translate(html).trim() : "";
 }
 
@@ -37,6 +45,7 @@ function mediaMarkdown(item: MediaItem): string {
   return `[${label}](${item.url})${dimensions}`;
 }
 
+/** Media referenced by one chunk, in the order the site presents it. */
 function chunkMedia(chunk: ContentChunk): MediaItem[] {
   const caption = htmlToMarkdown(chunk.footer);
   const common = {
@@ -66,33 +75,6 @@ function chunkMedia(chunk: ContentChunk): MediaItem[] {
   if (chunk.prototypeUrl) media.push({ type: "prototype", url: chunk.prototypeUrl, ...common });
   if (chunk.codeUrl) media.push({ type: "code", url: chunk.codeUrl, ...common });
   return media;
-}
-
-function renderResource(resource: unknown): string {
-  if (!resource || typeof resource !== "object") return "";
-  const value = resource as Record<string, unknown>;
-  const lines: string[] = [];
-  if (typeof value.displayName === "string") lines.push(`**${value.displayName}**`);
-  if (typeof value.definition === "string") lines.push(value.definition);
-  if (Array.isArray(value.connections)) {
-    lines.push("| Resource | Type | Status |", "| --- | --- | --- |");
-    const connections = [...value.connections].sort((left, right) => {
-      const a = Number((left as Record<string, unknown>).orderInComponent ?? 0);
-      const b = Number((right as Record<string, unknown>).orderInComponent ?? 0);
-      return a - b;
-    });
-    for (const connection of connections) {
-      if (!connection || typeof connection !== "object") continue;
-      const item = connection as Record<string, unknown>;
-      const label = String(item.displayName ?? "Resource").replaceAll("|", "\\|");
-      const url = typeof item.resourceUrl === "string" ? item.resourceUrl : undefined;
-      const name = url ? `[${label}](${url})` : label;
-      const type = String(item.resourceType ?? "").replaceAll("_", " ");
-      const status = String(item.status ?? "");
-      lines.push(`| ${name} | ${type} | ${status} |`);
-    }
-  }
-  return lines.join("\n");
 }
 
 function stableId(...parts: Array<string | number>): string {
@@ -127,15 +109,24 @@ function renderChunk(
   if (chunk.linkUrl && !media.some((item) => item.url === chunk.linkUrl)) {
     output.push(`[Related resource](${chunk.linkUrl})`);
   }
-  return {
-    id,
-    markdown: output
-      .filter(Boolean)
-      .join("\n\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim(),
-    media,
-  };
+  return { id, markdown: joinMarkdown(output), media };
+}
+
+/** Resource names referenced by visible sections, deduplicated in document order. */
+function resourceNames(sections: readonly ContentSection[]): string[] {
+  return [
+    ...new Set(
+      sections.flatMap((section) =>
+        (section.contentBlocks ?? [])
+          .filter((block) => !block.isHidden)
+          .flatMap((block) =>
+            (block.contentChunks ?? []).flatMap((chunk) =>
+              chunk.resourceName ? [chunk.resourceName] : [],
+            ),
+          ),
+      ),
+    ),
+  ];
 }
 
 export async function renderDocument(
@@ -145,23 +136,13 @@ export async function renderDocument(
   loadResource: (name: string) => Promise<unknown>,
 ): Promise<SemanticDocument> {
   const visibleSections = document.sections.filter((section) => section.isVisible !== false);
-  const resourceNames = [
-    ...new Set(
-      visibleSections.flatMap((section) =>
-        (section.contentBlocks ?? []).flatMap((block) =>
-          (block.contentChunks ?? []).flatMap((chunk) =>
-            chunk.resourceName ? [chunk.resourceName] : [],
-          ),
-        ),
-      ),
-    ),
-  ];
   const resources = new Map<string, unknown>();
   const unavailableResources = new Set<string>();
-  await mapConcurrent(resourceNames, 4, async (name) => {
+  await mapConcurrent(resourceNames(visibleSections), RESOURCE_CONCURRENCY, async (name) => {
     try {
       resources.set(name, await loadResource(name));
     } catch {
+      // A missing table is rendered as an explicit placeholder, not a failed document.
       unavailableResources.add(name);
     }
   });

@@ -66,6 +66,32 @@ export const documentJson = JSON.stringify({
   ],
 });
 
+/** One result in the shape the live Search service currently returns. */
+export function searchDocument(title: string, link: string, snippet: string) {
+  return {
+    document: {
+      derived_struct_data: {
+        title,
+        link,
+        snippets: [{ snippet, htmlSnippet: snippet }],
+        pagemap: { metatags: [{ "og:url": link, "twitter:url": link }] },
+      },
+    },
+  };
+}
+
+export const searchResponseNested = {
+  items: [
+    searchDocument(
+      "Buttons – Material Design 3",
+      "https://m3.material.io/components/buttons/guidelines",
+      "Buttons help people take action.",
+    ),
+    searchDocument("Blog", "https://m3.material.io/blog/buttons", "Ignored."),
+    searchDocument("External", "https://example.com/components/buttons", "Ignored."),
+  ],
+};
+
 export function createFixtureFetch(): typeof fetch {
   return (async (input: string | URL | Request) => {
     const url = new URL(
@@ -80,27 +106,7 @@ export function createFixtureFetch(): typeof fetch {
       return new Response(documentJson, { headers: { "content-type": "application/json" } });
     }
     if (url.pathname === "/search_api") {
-      return new Response(
-        JSON.stringify({
-          items: [
-            {
-              title: "Buttons",
-              link: "https://m3.material.io/components/buttons/guidelines",
-              snippet: "Buttons help people take action.",
-            },
-            {
-              title: "Blog",
-              link: "https://m3.material.io/blog/buttons",
-              snippet: "Ignored.",
-            },
-            {
-              title: "External",
-              link: "https://example.com/components/buttons",
-              snippet: "Ignored.",
-            },
-          ],
-        }),
-      );
+      return new Response(JSON.stringify(searchResponseNested));
     }
     return new Response("Not found", { status: 404 });
   }) as typeof fetch;

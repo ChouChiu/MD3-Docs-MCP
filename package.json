@@ -26,8 +26,8 @@
     "typecheck": "tsc --noEmit",
     "check": "biome check . && tsc --noEmit",
     "fix": "biome check --write .",
-    "test": "node --import tsx --test \"test/**/*.test.ts\"",
-    "test:live": "MD3_LIVE_TESTS=1 node --import tsx --test test/infrastructure/material/live.test.ts",
+    "test": "node --import tsx --test \"src/test/**/*.test.ts\"",
+    "test:live": "MD3_LIVE_TESTS=1 node --import tsx --test src/test/live.test.ts",
     "prepack": "npm run build"
   },
   "devDependencies": {

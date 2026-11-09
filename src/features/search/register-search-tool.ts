@@ -43,8 +43,11 @@ export function registerSearchFeature(server: McpServer, client: Md3Client): voi
         let rankOffset = 0;
         if (cursor) {
           const decoded = decodeCursor(cursor, "search");
-          if (decoded.query !== query || decoded.category !== category) {
+          if (decoded.query !== query) {
             throw new Md3Error("CURSOR_INVALID", "Search cursor does not match the query");
+          }
+          if (decoded.category !== category) {
+            throw new Md3Error("CURSOR_INVALID", "Search cursor does not match the category");
           }
           start = decoded.start;
           itemOffset = decoded.itemOffset;

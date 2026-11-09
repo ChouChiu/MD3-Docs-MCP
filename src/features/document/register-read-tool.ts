@@ -4,7 +4,7 @@ import { Md3Error } from "../../shared/errors/md3-error.js";
 import { toolError, toolResult } from "../../shared/mcp/tool-result.js";
 import { decodeCursor, encodeCursor } from "../../shared/pagination/cursor.js";
 import type { DocumentService } from "./document-service.js";
-import { paginateDocument } from "./semantic-markdown.js";
+import { paginateDocument } from "./markdown/index.js";
 
 const mediaSchema = z.object({
   type: z.enum(["image", "video", "prototype", "code"]),
@@ -72,13 +72,7 @@ export function registerDocumentFeature(server: McpServer, documents: DocumentSe
           }
           page = decoded.page;
         }
-        const pages = paginateDocument(document, maxCharacters, heading);
-        if (pages.length === 0) {
-          throw new Md3Error("NOT_FOUND", "Requested document heading was not found", {
-            heading,
-            availableHeadings: document.availableHeadings,
-          });
-        }
+        const pages = paginateDocument(document, maxCharacters);
         const selected = pages[page];
         if (!selected) {
           throw new Md3Error("CURSOR_INVALID", "Read cursor points beyond the document");
